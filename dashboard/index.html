@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time ML Pipeline Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .anomaly-row { animation: highlight 2s ease-out; }
+        @keyframes highlight {
+            from { background-color: rgba(239, 68, 68, 0.2); }
+            to { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-10 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-400">Streaming ML Pipeline</h1>
+                <p class="text-gray-400">Real-time Anomaly Detection Dashboard</p>
+            </div>
+            <div class="flex gap-4">
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p class="text-xs text-gray-500 uppercase">Throughput</p>
+                    <p id="throughput" class="text-2xl font-mono text-green-400">0.0 eps</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p class="text-xs text-gray-500 uppercase">Latency</p>
+                    <p id="latency" class="text-2xl font-mono text-yellow-400">0ms</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Charts -->
+            <div class="lg:col-span-2 space-y-8">
+                <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                    <h3 class="text-lg font-semibold mb-4">Transaction Volume (Last 5m)</h3>
+                    <canvas id="volumeChart" height="150"></canvas>
+                </div>
+            </div>
+
+            <!-- Alerts -->
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl h-[600px] flex flex-col">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    Recent Anomalies
+                </h3>
+                <div id="alertsList" class="flex-1 overflow-y-auto space-y-3 pr-2">
+                    <!-- Alerts populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket and API config
+        const API_URL = "http://localhost:8000";
+        const WS_URL = "ws://localhost:8000/ws/alerts";
+
+        // Chart Initialization
+        const ctx = document.getElementById('volumeChart').getContext('2d');
+        const volumeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Transactions / Sec',
+                    data: [],
+                    borderColor: '#60a5fa',
+                    backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#374151' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // Metrics Polling
+        async function updateMetrics() {
+            try {
+                const res = await fetch(`${API_URL}/metrics`);
+                const data = await res.json();
+                document.getElementById('throughput').innerText = `${data.throughput} eps`;
+                document.getElementById('latency').innerText = `${data.latency_ms}ms`;
+
+                // Update Chart
+                const now = new Date().toLocaleTimeString();
+                volumeChart.data.labels.push(now);
+                volumeChart.data.datasets[0].data.push(data.throughput);
+                if (volumeChart.data.labels.length > 20) {
+                    volumeChart.data.labels.shift();
+                    volumeChart.data.datasets[0].data.shift();
+                }
+                volumeChart.update('none');
+            } catch (e) { console.error("Metrics failed", e); }
+        }
+
+        // WebSocket for Live Alerts
+        function connectWS() {
+            const ws = new WebSocket(WS_URL);
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'anomaly') {
+                    addAlert(msg.data);
+                }
+            };
+            ws.onclose = () => setTimeout(connectWS, 2000);
+        }
+
+        function addAlert(data) {
+            const list = document.getElementById('alertsList');
+            const item = document.createElement('div');
+            item.className = "p-3 bg-gray-900 border-l-4 border-red-500 rounded shadow anomaly-row";
+            item.innerHTML = `
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-red-400 font-bold">FRAUD ALERT</span>
+                    <span class="text-gray-500">${new Date(data.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-mono">${data.user_id}</span>
+                    <span class="text-lg font-bold text-white">$${data.amount.toFixed(2)}</span>
+                </div>
+            `;
+            list.prepend(item);
+            if (list.children.length > 50) list.lastChild.remove();
+        }
+
+        setInterval(updateMetrics, 2000);
+        connectWS();
+    </script>
+</body>
+</html>

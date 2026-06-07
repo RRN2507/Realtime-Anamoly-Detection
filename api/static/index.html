@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Anomaly Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #e0e0e0; margin: 20px; }
+        .container { max-width: 1200px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background-color: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #00e676; }
+        .stat-label { color: #aaa; margin-top: 5px; }
+        .anomaly-list { background-color: #1e1e1e; border-radius: 8px; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #333; }
+        th { color: #aaa; font-weight: normal; }
+        .anomaly-row { color: #ff5252; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Real-Time Anomaly Detection</h1>
+            <div id="status">Status: <span style="color: #00e676;">Live</span></div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div id="total-count" class="stat-value">0</div>
+                <div class="stat-label">Total Transactions</div>
+            </div>
+            <div class="stat-card">
+                <div id="anomaly-count" class="stat-value" style="color: #ff5252;">0</div>
+                <div class="stat-label">Anomalies Detected</div>
+            </div>
+            <div class="stat-card">
+                <div id="anomaly-rate" class="stat-value" style="color: #ffab40;">0%</div>
+                <div class="stat-label">Anomaly Rate</div>
+            </div>
+        </div>
+
+        <div class="anomaly-list">
+            <h3>Recent Anomalies</h3>
+            <table id="anomaly-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User ID</th>
+                        <th>Amount</th>
+                        <th>Location</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody id="anomaly-body">
+                    <!-- Rows will be added here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                if (data.error) return;
+                
+                document.getElementById('total-count').innerText = data.total_count || 0;
+                document.getElementById('anomaly-count').innerText = data.anomaly_count || 0;
+                
+                const rate = data.total_count > 0 ? ((data.anomaly_count / data.total_count) * 100).toFixed(2) : 0;
+                document.getElementById('anomaly-rate').innerText = rate + '%';
+            } catch (e) { console.error(e); }
+        }
+
+        async function updateAnomalies() {
+            try {
+                const response = await fetch('/api/anomalies');
+                const data = await response.json();
+                if (data.error) return;
+
+                const tbody = document.getElementById('anomaly-body');
+                tbody.innerHTML = '';
+                
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'anomaly-row';
+                    tr.innerHTML = `
+                        <td>${new Date(row.timestamp).toLocaleTimeString()}</td>
+                        <td>${row.user_id}</td>
+                        <td>$${row.amount.toFixed(2)}</td>
+                        <td>${row.location}</td>
+                        <td>${row.anomaly_score.toFixed(4)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        setInterval(() => {
+            updateStats();
+            updateAnomalies();
+        }, 2000);
+
+        updateStats();
+        updateAnomalies();
+    </script>
+</body>
+</html>
