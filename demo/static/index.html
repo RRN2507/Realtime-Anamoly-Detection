@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fraud Watch — Real-Time Anomaly Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1C1B22;
+    --bg-glow:#241F2E;
+    --panel:#252430;
+    --panel-raised:#2C2B38;
+    --hairline:#3A3846;
+    --text:#F3F1EF;
+    --muted:#ACA6B5;
+    --muted-dim:#716C7A;
+    --pulse:#7FD9B0;
+    --pulse-soft:rgba(127,217,176,0.14);
+    --alert:#FF7A72;
+    --alert-soft:rgba(255,122,114,0.14);
+    --warm:#FFB08A;
+    --radius-lg:20px;
+    --radius-md:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1100px 500px at 15% -10%, var(--bg-glow), transparent 60%),
+      radial-gradient(900px 500px at 90% 0%, rgba(127,217,176,0.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Plus Jakarta Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    line-height:1.5;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+
+  /* ---- top bar ---- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 32px;
+    max-width:1280px; margin:0 auto;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-weight:800;
+    font-size:16px;
+    letter-spacing:-0.01em;
+  }
+  .brand .mark{
+    width:26px; height:26px; border-radius:8px;
+    background:linear-gradient(135deg, var(--pulse), #5FBF95);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 10px rgba(127,217,176,0.35);
+  }
+  .brand .mark svg{width:14px; height:14px;}
+
+  .signal-badge{
+    display:flex; align-items:center; gap:9px;
+    font-size:13.5px;
+    color:var(--muted);
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    padding:7px 14px 7px 11px;
+    border-radius:999px;
+  }
+  .dot{
+    width:8px; height:8px; border-radius:50%;
+    background:var(--pulse);
+    position:relative;
+  }
+  .dot::after{
+    content:'';
+    position:absolute; inset:-4px;
+    border-radius:50%;
+    border:1.5px solid var(--pulse);
+    opacity:0.6;
+    animation:breathe 2.2s ease-out infinite;
+  }
+  .dot.off{background:var(--muted-dim);}
+  .dot.off::after{display:none;}
+  @keyframes breathe{
+    0%{transform:scale(0.6); opacity:0.7;}
+    100%{transform:scale(1.8); opacity:0;}
+  }
+
+  /* ---- header ---- */
+  .header{
+    padding:20px 32px 28px;
+    max-width:1280px; margin:0 auto;
+  }
+  .header h1{
+    font-size:clamp(30px,3.6vw,44px);
+    font-weight:800;
+    letter-spacing:-0.03em;
+    line-height:1.08;
+  }
+  .header p{
+    margin-top:12px;
+    color:var(--muted);
+    font-size:15.5px;
+    max-width:600px;
+    line-height:1.6;
+  }
+  .header p b{color:var(--text); font-weight:600;}
+
+  .wrap{max-width:1280px; margin:0 auto; padding:0 32px 48px;}
+
+  /* ---- pulse hero ---- */
+  .pulse-card{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-radius:var(--radius-lg);
+    padding:24px 0 0;
+    margin-bottom:20px;
+    overflow:hidden;
+    box-shadow:0 20px 50px -30px rgba(0,0,0,0.6);
+  }
+  .pulse-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 26px 16px;
+  }
+  .pulse-title{
+    font-size:15px;
+    font-weight:700;
+  }
+  .pulse-sub{
+    font-size:13px;
+    color:var(--muted-dim);
+    margin-top:2px;
+  }
+  .pulse-legend{
+    display:flex; gap:18px;
+    font-size:12.5px;
+    color:var(--muted);
+  }
+  .pulse-legend .lg{display:flex; align-items:center; gap:6px;}
+  .swatch{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  #scopeCanvas{display:block; width:100%; height:190px;}
+
+  /* ---- stat row ---- */
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:14px;
+    margin-bottom:20px;
+  }
+  .stat{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-radius:var(--radius-md);
+    padding:18px 20px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .stat .top-row{display:flex; align-items:center; justify-content:space-between;}
+  .stat .label{font-size:13px; color:var(--muted); font-weight:500;}
+  .stat .icon{
+    width:28px; height:28px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .stat .icon svg{width:14px; height:14px;}
+  .stat.i-pulse .icon{background:var(--pulse-soft); color:var(--pulse);}
+  .stat.i-clock .icon{background:rgba(255,176,138,0.14); color:var(--warm);}
+  .stat.i-check .icon{background:rgba(255,255,255,0.06); color:var(--muted);}
+  .stat.i-alert .icon{background:var(--alert-soft); color:var(--alert);}
+  .stat .value{
+    font-family:'JetBrains Mono',monospace;
+    font-size:26px;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  .stat .value small{font-size:13px; color:var(--muted-dim); font-family:'Plus Jakarta Sans',sans-serif; font-weight:500;}
+
+  /* ---- two column ---- */
+  .cols{
+    display:grid;
+    grid-template-columns:1.25fr 1fr;
+    gap:18px;
+    align-items:start;
+  }
+  @media (max-width:880px){ .cols{grid-template-columns:1fr;} .stats{grid-template-columns:1fr 1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--hairline);
+    border-radius:var(--radius-lg);
+    overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 22px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .panel-head h3{font-size:15px; font-weight:700;}
+  .panel-head p{font-size:12.5px; color:var(--muted-dim); margin-top:2px;}
+  .panel-head .count{
+    font-size:12.5px;
+    color:var(--muted);
+    background:var(--panel-raised);
+    padding:4px 10px;
+    border-radius:999px;
+  }
+
+  /* live feed */
+  #feed{ height:430px; overflow-y:auto; }
+  .row{
+    display:flex; align-items:center; gap:12px;
+    padding:11px 22px;
+    border-bottom:1px solid rgba(58,56,70,0.5);
+    transition:background 0.2s;
+  }
+  .row:hover{background:var(--panel-raised);}
+  .avatar{
+    width:30px; height:30px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11.5px; font-weight:700;
+    color:#1C1B22;
+    flex-shrink:0;
+  }
+  .row-mid{flex:1; min-width:0;}
+  .row-user{font-size:13.5px; font-weight:600;}
+  .row-meta{font-size:12px; color:var(--muted-dim); margin-top:1px;}
+  .row-amt{
+    font-family:'JetBrains Mono',monospace;
+    font-size:14px; font-weight:600;
+    text-align:right;
+  }
+  .row.anomaly{ background:var(--alert-soft); animation:flashrow 1.6s ease-out; }
+  .row.anomaly .row-amt{color:var(--alert);}
+  .pill{
+    font-size:10.5px; font-weight:600;
+    padding:3px 8px; border-radius:999px;
+    background:var(--alert-soft); color:var(--alert);
+    white-space:nowrap;
+  }
+  @keyframes flashrow{
+    from{background:rgba(255,122,114,0.32);}
+    to{background:var(--alert-soft);}
+  }
+
+  /* alerts */
+  #alerts{ max-height:430px; overflow-y:auto; }
+  .alert-item{
+    padding:16px 22px;
+    border-bottom:1px solid var(--hairline);
+    animation:slidein 0.4s cubic-bezier(.2,.9,.3,1);
+  }
+  @keyframes slidein{ from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);} }
+  .alert-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .alert-tag{
+    font-size:12px; font-weight:600; color:var(--alert);
+    display:flex; align-items:center; gap:6px;
+  }
+  .alert-tag .dot2{width:6px; height:6px; border-radius:50%; background:var(--alert);}
+  .alert-time{font-size:12px; color:var(--muted-dim);}
+  .alert-body{display:flex; align-items:center; gap:12px;}
+  .alert-body .row-mid{flex:1;}
+  .alert-amt{font-family:'JetBrains Mono',monospace; font-size:17px; font-weight:700;}
+  .alert-score{margin-top:8px; font-size:12px; color:var(--muted-dim);}
+  .alert-score b{color:var(--muted); font-family:'JetBrains Mono',monospace; font-weight:500;}
+
+  .empty{
+    padding:56px 24px;
+    text-align:center;
+    color:var(--muted-dim);
+    font-size:13.5px;
+    line-height:1.6;
+  }
+  .empty .big{font-size:28px; margin-bottom:10px;}
+
+  footer{
+    max-width:1280px; margin:0 auto; padding:8px 32px 40px;
+    color:var(--muted-dim); font-size:12.5px;
+  }
+  footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--hairline);}
+  footer a:hover{color:var(--text); border-color:var(--muted);}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--hairline); border-radius:4px;}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M2 12h4l2-7 4 14 3-9 2 5h5" stroke="#171923" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      Fraud Watch
+    </div>
+    <div class="signal-badge">
+      <span class="dot" id="signalDot"></span>
+      <span id="signalText">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <h1>Watching your transactions, live.</h1>
+    <p>Every transaction gets checked the moment it arrives by a model trained to notice the ones that don't fit the usual pattern — <b>no batch jobs, no waiting.</b> This demo runs the same scoring logic as production, simplified to a single service so you can see it live.</p>
+  </div>
+
+  <div class="wrap">
+
+    <div class="pulse-card">
+      <div class="pulse-head">
+        <div>
+          <div class="pulse-title">Live pulse</div>
+          <div class="pulse-sub">Transaction amounts as they come in</div>
+        </div>
+        <div class="pulse-legend">
+          <span class="lg"><span class="swatch" style="background:var(--pulse)"></span>normal</span>
+          <span class="lg"><span class="swatch" style="background:var(--alert)"></span>needs a look</span>
+        </div>
+      </div>
+      <canvas id="scopeCanvas"></canvas>
+    </div>
+
+    <div class="stats">
+      <div class="stat i-pulse">
+        <div class="top-row">
+          <span class="label">Throughput</span>
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2 7 6-14 2 7h4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
+        <div class="value mono" id="mThroughput">0.0<small> / sec</small></div>
+      </div>
+      <div class="stat i-clock">
+        <div class="top-row">
+          <span class="label">Response time</span>
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="value mono" id="mLatency">0.0<small> ms</small></div>
+      </div>
+      <div class="stat i-check">
+        <div class="top-row">
+          <span class="label">Checked so far</span>
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
+        <div class="value mono" id="mTotal">0</div>
+      </div>
+      <div class="stat i-alert">
+        <div class="top-row">
+          <span class="label">Needs a look</span>
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 4l9 16H3l9-16z" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="value mono" id="mRate">0.0<small>%</small></div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>Coming through now</h3>
+            <p>A live look at what's being processed</p>
+          </div>
+          <span class="count mono" id="feedCount">0</span>
+        </div>
+        <div id="feed"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>Needs a look</h3>
+            <p>Flagged as unusual by the model</p>
+          </div>
+          <span class="count mono" id="alertCount">0</span>
+        </div>
+        <div id="alerts">
+          <div class="empty">
+            <div class="big">🌤️</div>
+            All quiet right now.<br>We'll let you know the moment something looks off.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Simplified single-service reproduction of the full pipeline (Kafka &rarr; Spark Structured Streaming &rarr; TimescaleDB) for a free-hosted live demo — see the <a href="https://github.com/RRN2507/Realtime-Anamoly-Detection" target="_blank">repo</a> for the production architecture.
+  </footer>
+
+<script>
+const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
+const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/alerts`;
+
+// ---------- avatar colors ----------
+const AVATAR_COLORS = ['#7FD9B0','#FFB08A','#8FB8FF','#E8A9FF','#FFD98A','#8AE0D9'];
+function colorFor(str){
+  let hash = 0;
+  for(let i=0;i<str.length;i++) hash = str.charCodeAt(i) + ((hash<<5)-hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+function initialsFor(userId){
+  const num = userId.replace('user_','');
+  return '#' + num.slice(0,3);
+}
+
+// ---------- pulse curve ----------
+const canvas = document.getElementById('scopeCanvas');
+const ctx = canvas.getContext('2d');
+let scopeData = [];
+const MAX_POINTS = 110;
+
+function resizeCanvas(){
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 190 * dpr;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr, dpr);
+  drawScope();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function smoothPath(points){
+  // quadratic-curve smoothing between points for an organic, human line
+  if(points.length < 2) return null;
+  const path = new Path2D();
+  path.moveTo(points[0].x, points[0].y);
+  for(let i=1;i<points.length-1;i++){
+    const xc = (points[i].x + points[i+1].x)/2;
+    const yc = (points[i].y + points[i+1].y)/2;
+    path.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+  }
+  const last = points[points.length-1];
+  path.lineTo(last.x, last.y);
+  return path;
+}
+
+function drawScope(){
+  const w = canvas.getBoundingClientRect().width;
+  const h = 190;
+  ctx.clearRect(0,0,w,h);
+
+  if(scopeData.length < 2) return;
+
+  const maxAmt = Math.max(...scopeData.map(d=>d.amount), 550);
+  const stepX = w / (MAX_POINTS - 1);
+  const startIdx = MAX_POINTS - scopeData.length;
+
+  const pts = scopeData.map((d,i)=>({
+    x: (startIdx+i)*stepX,
+    y: h - (Math.min(d.amount, maxAmt)/maxAmt) * (h-28) - 10,
+    isAnomaly: d.isAnomaly
+  }));
+
+  const path = smoothPath(pts);
+
+  // soft fill under curve
+  const fillPath = new Path2D(path);
+  fillPath.lineTo(pts[pts.length-1].x, h);
+  fillPath.lineTo(pts[0].x, h);
+  fillPath.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, 'rgba(127,217,176,0.16)');
+  grad.addColorStop(1, 'rgba(127,217,176,0)');
+  ctx.fillStyle = grad;
+  ctx.fill(fillPath);
+
+  // main curve
+  ctx.strokeStyle = '#7FD9B0';
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke(path);
+
+  // anomaly markers
+  pts.forEach(p=>{
+    if(!p.isAnomaly) return;
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(255,122,114,0.18)';
+    ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.fillStyle = '#FF7A72';
+    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function pushScopePoint(amount, isAnomaly){
+  scopeData.push({amount, isAnomaly});
+  if(scopeData.length > MAX_POINTS) scopeData.shift();
+  drawScope();
+}
+
+// ---------- metrics ----------
+async function updateMetrics(){
+  try{
+    const res = await fetch('/metrics');
+    const d = await res.json();
+    document.getElementById('mThroughput').innerHTML = `${d.throughput.toFixed(1)}<small> / sec</small>`;
+    document.getElementById('mLatency').innerHTML = `${d.latency_ms.toFixed(2)}<small> ms</small>`;
+    document.getElementById('mTotal').textContent = d.total_processed.toLocaleString();
+    const rate = d.total_processed > 0 ? (d.total_anomalies / d.total_processed * 100) : 0;
+    document.getElementById('mRate').innerHTML = `${rate.toFixed(1)}<small>%</small>`;
+  }catch(e){ console.error('metrics failed', e); }
+}
+
+// ---------- live feed ----------
+const feedEl = document.getElementById('feed');
+let feedCount = 0;
+function addFeedRow(tx){
+  feedCount++;
+  document.getElementById('feedCount').textContent = feedCount.toLocaleString();
+
+  const row = document.createElement('div');
+  row.className = 'row' + (tx.is_anomaly ? ' anomaly' : '');
+  const t = new Date(tx.timestamp).toLocaleTimeString([], {hour12:false});
+  row.innerHTML = `
+    <span class="avatar" style="background:${colorFor(tx.user_id)}">${initialsFor(tx.user_id)}</span>
+    <span class="row-mid">
+      <div class="row-user">${tx.user_id}</div>
+      <div class="row-meta">${tx.location} &middot; ${t}</div>
+    </span>
+    ${tx.is_anomaly ? '<span class="pill">unusual</span>' : ''}
+    <span class="row-amt">$${tx.amount.toFixed(2)}</span>
+  `;
+  feedEl.prepend(row);
+  while(feedEl.children.length > 60) feedEl.lastChild.remove();
+}
+
+// ---------- alerts ----------
+const alertsEl = document.getElementById('alerts');
+let alertCount = 0;
+function addAlert(tx){
+  if(alertCount === 0) alertsEl.innerHTML = '';
+  alertCount++;
+  document.getElementById('alertCount').textContent = alertCount;
+
+  const item = document.createElement('div');
+  item.className = 'alert-item';
+  const t = new Date(tx.timestamp).toLocaleTimeString([], {hour12:false});
+  item.innerHTML = `
+    <div class="alert-top">
+      <span class="alert-tag"><span class="dot2"></span>Flagged for review</span>
+      <span class="alert-time">${t}</span>
+    </div>
+    <div class="alert-body">
+      <span class="avatar" style="background:${colorFor(tx.user_id)}">${initialsFor(tx.user_id)}</span>
+      <span class="row-mid">
+        <div class="row-user">${tx.user_id}</div>
+        <div class="row-meta">${tx.location}</div>
+      </span>
+      <span class="alert-amt">$${tx.amount.toFixed(2)}</span>
+    </div>
+    <div class="alert-score">model confidence <b>${tx.anomaly_score.toFixed(3)}</b></div>
+  `;
+  alertsEl.prepend(item);
+  while(alertsEl.children.length > 40) alertsEl.lastChild.remove();
+}
+
+// ---------- websocket ----------
+let reconnectDelay = 1500;
+function connectWS(){
+  const ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('signalDot').classList.remove('off');
+    document.getElementById('signalText').textContent = 'Watching live';
+    reconnectDelay = 1500;
+  };
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if(msg.type === 'transaction'){
+      const tx = msg.data;
+      pushScopePoint(tx.amount, tx.is_anomaly);
+      addFeedRow(tx);
+      if(tx.is_anomaly) addAlert(tx);
+    }
+  };
+  ws.onclose = () => {
+    document.getElementById('signalDot').classList.add('off');
+    document.getElementById('signalText').textContent = 'Reconnecting…';
+    setTimeout(connectWS, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+resizeCanvas();
+connectWS();
+updateMetrics();
+setInterval(updateMetrics, 2000);
+</script>
+</body>
+</html>
