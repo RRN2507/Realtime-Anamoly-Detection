@@ -124,8 +124,7 @@ async def generator_loop():
                 anomalies.append(tx)
                 total_anomaly_count += 1
 
-        if tx["is_anomaly"]:
-            await manager.broadcast({"type": "anomaly", "data": tx})
+       await manager.broadcast({"type": "transaction", "data": tx})
 
         await asyncio.sleep(interval)
 
